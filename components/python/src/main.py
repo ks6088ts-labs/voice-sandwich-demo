@@ -14,7 +14,6 @@ from langchain_core.runnables import RunnableGenerator
 from langgraph.checkpoint.memory import InMemorySaver
 from starlette.staticfiles import StaticFiles
 
-from assemblyai_stt import AssemblyAISTT
 from cartesia_tts import CartesiaTTS
 from events import (
     AgentChunkEvent,
@@ -24,6 +23,7 @@ from events import (
     VoiceAgentEvent,
     event_to_dict,
 )
+from stt_factory import create_stt_provider
 from utils import merge_async_iters
 
 load_dotenv()
@@ -83,15 +83,16 @@ async def _stt_stream(
     """
     Transform stream: Audio (Bytes) → Voice Events (VoiceAgentEvent)
 
-    This function takes a stream of audio chunks and sends them to AssemblyAI for STT.
+    This function takes a stream of audio chunks and sends them to the configured
+    STT provider for transcription.
 
     It uses a producer-consumer pattern where:
     - Producer: A background task reads audio chunks from audio_stream and sends
-      them to AssemblyAI via WebSocket. This runs concurrently with the consumer,
+      them to the STT provider. This runs concurrently with the consumer,
       allowing transcription to begin before all audio has arrived.
-    - Consumer: The main coroutine receives transcription events from AssemblyAI
-      and yields them downstream. Events include both partial results (stt_chunk)
-      and final transcripts (stt_output).
+    - Consumer: The main coroutine receives transcription events from the STT
+      provider and yields them downstream. Events include both partial results
+      (stt_chunk) and final transcripts (stt_output).
 
     Args:
         audio_stream: Async iterator of PCM audio bytes (16-bit, mono, 16kHz)
@@ -99,23 +100,23 @@ async def _stt_stream(
     Yields:
         STT events (stt_chunk for partials, stt_output for final transcripts)
     """
-    stt = AssemblyAISTT(sample_rate=16000)
+    stt = create_stt_provider(sample_rate=16000)
 
     async def send_audio():
         """
-        Background task that pumps audio chunks to AssemblyAI.
+        Background task that pumps audio chunks to the STT provider.
 
         This runs concurrently with the main coroutine, continuously reading
-        audio chunks from the input stream and forwarding them to AssemblyAI.
-        When the input stream ends, it signals completion by closing the
-        WebSocket connection.
+        audio chunks from the input stream and forwarding them to the STT
+        provider. When the input stream ends, it signals completion by
+        closing the provider connection.
         """
         try:
-            # Stream each audio chunk to AssemblyAI as it arrives
+            # Stream each audio chunk to the STT provider as it arrives
             async for audio_chunk in audio_stream:
                 await stt.send_audio(audio_chunk)
         finally:
-            # Signal to AssemblyAI that audio streaming is complete
+            # Signal to the STT provider that audio streaming is complete
             await stt.close()
 
     # Launch the audio sending task in the background
@@ -124,8 +125,8 @@ async def _stt_stream(
 
     try:
         # Consumer loop: receive and yield transcription events as they arrive
-        # from AssemblyAI. The receive_events() method listens on the WebSocket
-        # for transcript events and yields them as they become available.
+        # from the STT provider. The receive_events() method listens for
+        # transcript events and yields them as they become available.
         async for event in stt.receive_events():
             yield event
     finally:
@@ -133,7 +134,7 @@ async def _stt_stream(
         with contextlib.suppress(asyncio.CancelledError):
             send_task.cancel()
             await send_task
-        # Ensure the WebSocket connection is closed
+        # Ensure the provider connection is closed
         await stt.close()
 
 

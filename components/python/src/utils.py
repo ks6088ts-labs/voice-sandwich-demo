@@ -8,7 +8,6 @@ and other common operations across the voice agent system.
 import asyncio
 from typing import Any, AsyncIterator, TypeVar
 
-
 T = TypeVar("T")
 
 
