@@ -5,7 +5,10 @@ A local Speech-to-Text provider using OpenAI's Whisper model.
 This provider runs entirely locally without requiring API keys or internet connectivity.
 
 Input: PCM 16-bit audio buffer (bytes)
-Output: STT events (stt_chunk for partials, stt_output for final transcripts)
+Output: STT events (stt_output for final transcripts)
+
+Note: This provider does not produce streaming partial transcripts (stt_chunk)
+as Whisper processes the entire audio buffer at once.
 """
 
 import asyncio
@@ -16,6 +19,9 @@ import whisper
 
 from events import STTEvent, STTOutputEvent
 from stt_base import STTProvider
+
+# PCM 16-bit audio normalization constant
+INT16_MAX = 32768.0
 
 
 class WhisperSTT(STTProvider):
@@ -130,7 +136,8 @@ class WhisperSTT(STTProvider):
         # Convert bytes to numpy array
         # Audio is 16-bit PCM, so convert to float32 normalized to [-1, 1]
         audio_np = (
-            np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
+            np.frombuffer(audio_data, dtype=np.int16).astype(np.float32)
+            / INT16_MAX
         )
 
         # Run transcription in thread pool to avoid blocking
