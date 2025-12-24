@@ -18,7 +18,7 @@ flowchart LR
 
         subgraph Pipeline [Voice Agent Pipeline]
             direction LR
-            STT[AssemblyAI STT] -->|Transcripts| Agent[LangChain Agent]
+            STT[STT Provider<br/>AssemblyAI / Whisper] -->|Transcripts| Agent[LangChain Agent]
             Agent -->|Text Chunks| TTS[Cartesia TTS]
         end
 
@@ -33,7 +33,7 @@ flowchart LR
 
 Each stage is an async generator that transforms a stream of events:
 
-1. **STT Stage** (`sttStream`): Streams audio to AssemblyAI, yields transcription events (`stt_chunk`, `stt_output`)
+1. **STT Stage** (`sttStream`): Streams audio to the configured STT provider (AssemblyAI or Whisper), yields transcription events (`stt_chunk`, `stt_output`)
 2. **Agent Stage** (`agentStream`): Passes upstream events through, invokes LangChain agent on final transcripts, yields agent responses (`agent_chunk`, `tool_call`, `tool_result`, `agent_end`)
 3. **TTS Stage** (`ttsStream`): Passes upstream events through, sends agent text to Cartesia, yields audio events (`tts_chunk`)
 
@@ -44,11 +44,28 @@ Each stage is an async generator that transforms a stream of events:
 
 ### API Keys
 
-| Service | Environment Variable | Purpose |
-|---------|---------------------|---------|
-| AssemblyAI | `ASSEMBLYAI_API_KEY` | Speech-to-Text |
-| Cartesia | `CARTESIA_API_KEY` | Text-to-Speech |
-| Anthropic | `ANTHROPIC_API_KEY` | LangChain Agent (Claude) |
+| Service | Environment Variable | Purpose | Required |
+|---------|---------------------|---------|----------|
+| AssemblyAI | `ASSEMBLYAI_API_KEY` | Speech-to-Text (when using AssemblyAI) | Conditional* |
+| Cartesia | `CARTESIA_API_KEY` | Text-to-Speech | Yes |
+| Anthropic | `ANTHROPIC_API_KEY` | LangChain Agent (Claude) | Yes |
+
+\* Required only when `STT_PROVIDER=assemblyai` (default). Not needed for Whisper.
+
+### STT Provider Configuration
+
+The Speech-to-Text provider can be configured via environment variables:
+
+| Variable | Options | Default | Description |
+|----------|---------|---------|-------------|
+| `STT_PROVIDER` | `assemblyai`, `whisper` | `assemblyai` | Choose STT provider |
+| `WHISPER_MODEL` | `tiny`, `base`, `small`, `medium`, `large` | `base` | Whisper model size (when using Whisper) |
+| `WHISPER_LANGUAGE` | Language code (e.g., `en`, `ja`) | auto-detect | Optional language hint for Whisper |
+
+**Provider Comparison:**
+
+- **AssemblyAI**: Cloud-based, requires API key, provides real-time streaming transcription with partial results
+- **Whisper**: Local processing, no API key needed, processes audio in batches (final transcripts only)
 
 ## Quick Start
 

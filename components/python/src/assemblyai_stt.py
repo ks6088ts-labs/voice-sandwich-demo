@@ -19,9 +19,10 @@ import websockets
 from websockets.client import WebSocketClientProtocol
 
 from events import STTChunkEvent, STTEvent, STTOutputEvent
+from stt_base import STTProvider
 
 
-class AssemblyAISTT:
+class AssemblyAISTT(STTProvider):
     def __init__(
         self,
         api_key: Optional[str] = None,
